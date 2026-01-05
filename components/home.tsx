@@ -11,7 +11,6 @@ const getDensityData = async () => {
 
   const data = await response.json();
 
-  // Process data into GeoJSON
   let densityGeoJSON: GeoJSON.FeatureCollection | null = null;
   let geometryGeoJSON: GeoJSON.FeatureCollection | null = null;
 
@@ -45,9 +44,7 @@ const HomeComponent = () => {
 
   const densityData = data?.density ?? null;
   const geometry = data?.geometry ?? null;
-
-  console.log("densityData", densityData);
-  console.log("geometry", geometry);
+  const loading = isLoading || isRefetching;
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,7 +52,7 @@ const HomeComponent = () => {
 
       <main className="flex items-center justify-center p-8">
         <div className="w-full max-w-4xl">
-          <MyMap />
+          <MyMap density={densityData} geometry={geometry} loading={loading} />
         </div>
       </main>
     </div>
