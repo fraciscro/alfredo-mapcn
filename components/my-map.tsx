@@ -4,15 +4,14 @@ import { Map, MapControls, MapClusterLayer, MapPopup, useMap } from "@/component
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import * as turf from "@turf/turf";
+import { ExternalLink, Loader2 } from "lucide-react";
 
 // Locations for the control board
 const LOCATIONS = [
-  { name: "Esposende", coordinates: [-8.7811, 41.5336] as [number, number], zoom: 12 },
-  { name: "Restaurante Pinto", coordinates: [-8.4563, 41.1496] as [number, number], zoom: 15 },
+  { name: "O Pinto", coordinates: [-8.4563, 41.1496] as [number, number], zoom: 15 },
   { name: "Entroncamento", coordinates: [-8.4679, 39.4635] as [number, number], zoom: 12 },
-  { name: "Lisboa", coordinates: [-9.1393, 38.7223] as [number, number], zoom: 11 },
-  { name: "Porto", coordinates: [-8.6291, 41.1579] as [number, number], zoom: 11 },
 ];
 
 interface PropertyPoint {
@@ -118,11 +117,38 @@ function FitBounds({
   return null;
 }
 
+// Fetch property details from the API
+async function fetchPropertyDetails(platformHash: string) {
+  const response = await fetch(`/api/metasearch-property?platform_hash=${platformHash}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to fetch property details");
+  }
+
+  return response.json();
+}
+
 export function MyMap({ density, geometry, loading }: MyMapProps) {
   const [selectedPoint, setSelectedPoint] = useState<{
     coordinates: [number, number];
     properties: PropertyPoint;
   } | null>(null);
+
+  // Fetch property details when a point is selected
+  // The query only runs when selectedPoint exists (enabled: !!selectedPoint)
+  const {
+    data: propertyDetails,
+    isLoading: isLoadingDetails,
+    error: detailsError,
+  } = useQuery({
+    queryKey: ["property", selectedPoint?.properties.id],
+    queryFn: () => fetchPropertyDetails(selectedPoint!.properties.id),
+    enabled: !!selectedPoint?.properties.id, // Only fetch when we have a selected point
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
   return (
     <Card className="h-[500px] p-0 overflow-hidden relative">
@@ -145,7 +171,6 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
             data={density as GeoJSON.FeatureCollection<GeoJSON.Point, PropertyPoint>}
             clusterRadius={50}
             clusterMaxZoom={20}
-            // Alfredo-neo style colors: dark circles that turn gold at high zoom
             clusterColors={["#191C1F", "#191C1F", "#EBCB8B"]}
             clusterThresholds={[100, 750]}
             pointColor="#EBCB8B"
@@ -169,14 +194,12 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
             focusAfterOpen={false}
             closeButton
           >
-            <div className="space-y-1 p-1">
-              <p className="text-sm font-medium">ID: {selectedPoint.properties.id}</p>
-              {selectedPoint.properties.price && (
-                <p className="text-sm text-muted-foreground">
-                  Price: {selectedPoint.properties.price}
-                </p>
-              )}
-            </div>
+            <PropertyPopupContent
+              isLoading={isLoadingDetails}
+              error={detailsError}
+              property={propertyDetails}
+              fallbackPrice={selectedPoint.properties.price}
+            />
           </MapPopup>
         )}
 
@@ -189,6 +212,108 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
         <MapControls />
       </Map>
     </Card>
+  );
+}
+
+// Type for property details from the API
+interface PropertyDetails {
+  images?: string[];
+  image?: string;
+  title?: string;
+  address?: string;
+  price?: string;
+  url?: string;
+  link?: string;
+  asset_type?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  area?: number;
+}
+
+// Separate component for popup content - handles loading, error, and success states
+function PropertyPopupContent({
+  isLoading,
+  error,
+  property,
+  fallbackPrice,
+}: {
+  isLoading: boolean;
+  error: Error | null;
+  property: PropertyDetails | undefined;
+  fallbackPrice: string;
+}) {
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="w-64 p-4 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="w-64 p-4">
+        <p className="text-sm text-destructive">Failed to load property details</p>
+        <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
+      </div>
+    );
+  }
+
+  // Success state - display property details
+  const imageUrl = property?.images?.[0] || property?.image;
+  const title = property?.title || property?.address || "Property";
+  const price = property?.price || fallbackPrice;
+  const url = property?.url || property?.link;
+
+  return (
+    <div className="w-64">
+      {/* Property Image */}
+      {imageUrl && (
+        <div className="relative h-32 overflow-hidden rounded-md">
+          <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+        </div>
+      )}
+
+      {/* Property Details */}
+      <div className="space-y-2 pt-2">
+        <div>
+          {property?.asset_type && (
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {property.asset_type}
+            </span>
+          )}
+          <h3 className="font-semibold text-foreground leading-tight line-clamp-2">{title}</h3>
+        </div>
+
+        {/* Price */}
+        {price && <p className="text-lg font-bold text-primary">{price}</p>}
+
+        {/* Property features */}
+        <div className="flex gap-3 text-xs text-muted-foreground">
+          {property?.bedrooms && <span>{property.bedrooms} beds</span>}
+          {property?.bathrooms && <span>{property.bathrooms} baths</span>}
+          {property?.area && <span>{property.area} m²</span>}
+        </div>
+
+        {/* Actions */}
+        {url && (
+          <div className="pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-8"
+              onClick={() => window.open(url, "_blank")}
+            >
+              <ExternalLink className="size-3.5 mr-1.5" />
+              View Listing
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
