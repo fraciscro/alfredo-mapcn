@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as turf from "@turf/turf";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, Bed, Bath, Maximize, Navigation } from "lucide-react";
 
 // Locations for the control board
 const LOCATIONS = [
@@ -190,9 +190,8 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
             longitude={selectedPoint.coordinates[0]}
             latitude={selectedPoint.coordinates[1]}
             onClose={() => setSelectedPoint(null)}
-            closeOnClick={false}
+            closeOnClick={true}
             focusAfterOpen={false}
-            closeButton
           >
             <PropertyPopupContent
               isLoading={isLoadingDetails}
@@ -228,6 +227,9 @@ interface PropertyDetails {
   bedrooms?: number;
   bathrooms?: number;
   area?: number;
+  coordinates?: [number, number];
+  latitude?: number;
+  longitude?: number;
 }
 
 // Separate component for popup content - handles loading, error, and success states
@@ -245,7 +247,7 @@ function PropertyPopupContent({
   // Loading state
   if (isLoading) {
     return (
-      <div className="w-64 p-4 flex items-center justify-center">
+      <div className="w-64 h-48 flex items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
       </div>
@@ -269,16 +271,22 @@ function PropertyPopupContent({
   const url = property?.url || property?.link;
 
   return (
-    <div className="w-64">
+    <div className="w-64 p-0">
       {/* Property Image */}
       {imageUrl && (
-        <div className="relative h-32 overflow-hidden rounded-md">
+        <div className="relative h-32 overflow-hidden rounded-t-md">
           <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+          {/* Price badge on image */}
+          {price && (
+            <div className="absolute bottom-2 left-2 bg-background/90 backdrop-blur-sm rounded-md px-2 py-1">
+              <span className="text-sm font-bold text-foreground">{price}</span>
+            </div>
+          )}
         </div>
       )}
 
       {/* Property Details */}
-      <div className="space-y-2 pt-2">
+      <div className="space-y-2 p-3">
         <div>
           {property?.asset_type && (
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -288,30 +296,53 @@ function PropertyPopupContent({
           <h3 className="font-semibold text-foreground leading-tight line-clamp-2">{title}</h3>
         </div>
 
-        {/* Price */}
-        {price && <p className="text-lg font-bold text-primary">{price}</p>}
-
-        {/* Property features */}
-        <div className="flex gap-3 text-xs text-muted-foreground">
-          {property?.bedrooms && <span>{property.bedrooms} beds</span>}
-          {property?.bathrooms && <span>{property.bathrooms} baths</span>}
-          {property?.area && <span>{property.area} m²</span>}
+        {/* Property features with icons */}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          {property?.bedrooms && (
+            <div className="flex items-center gap-1">
+              <Bed className="size-3.5" />
+              <span>{property.bedrooms}</span>
+            </div>
+          )}
+          {property?.bathrooms && (
+            <div className="flex items-center gap-1">
+              <Bath className="size-3.5" />
+              <span>{property.bathrooms}</span>
+            </div>
+          )}
+          {property?.area && (
+            <div className="flex items-center gap-1">
+              <Maximize className="size-3.5" />
+              <span>{property.area} m²</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
-        {url && (
-          <div className="pt-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full h-8"
-              onClick={() => window.open(url, "_blank")}
-            >
-              <ExternalLink className="size-3.5 mr-1.5" />
+        <div className="flex gap-2 pt-1">
+          {url && (
+            <Button size="sm" className="flex-1 h-8" onClick={() => window.open(url, "_blank")}>
+              <Navigation className="size-3.5 mr-1.5" />
               View Listing
             </Button>
-          </div>
-        )}
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            onClick={() => {
+              const coords = property?.coordinates;
+              if (coords) {
+                window.open(
+                  `https://www.google.com/maps/dir/?api=1&destination=${coords[1]},${coords[0]}`,
+                  "_blank"
+                );
+              }
+            }}
+          >
+            <ExternalLink className="size-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
