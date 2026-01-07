@@ -1,18 +1,19 @@
 "use client";
 
-import { Map, MapControls, MapClusterLayer, MapPopup, useMap } from "@/components/ui/map";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import * as turf from "@turf/turf";
-import { ExternalLink, Loader2, Bed, Bath, Maximize, Navigation } from "lucide-react";
+import { Map, MapControls, MapClusterLayer, MapPopup } from "@/components/ui/map";
+import { Card } from "@/components/ui/card";
 
-// Locations for the control board
-const LOCATIONS = [
-  { name: "O Pinto", coordinates: [-8.4563, 41.1496] as [number, number], zoom: 15 },
-  { name: "Entroncamento", coordinates: [-8.4679, 39.4635] as [number, number], zoom: 12 },
-];
+// Import organized map components
+import {
+  GeometryLayer,
+  FitBounds,
+  PropertyPopupContent,
+  fetchPropertyDetails,
+  ControlBoard,
+  DrawControl,
+} from "@/components/map";
 
 interface PropertyPoint {
   id: string;
@@ -25,112 +26,6 @@ type MyMapProps = {
   loading?: boolean;
 };
 
-// Geometry layer component for displaying the search area polygon
-function GeometryLayer({ geometry }: { geometry: GeoJSON.FeatureCollection }) {
-  const { map, isLoaded } = useMap();
-
-  useEffect(() => {
-    if (!map || !isLoaded) return;
-
-    // Add source if it doesn't exist
-    if (!map.getSource("geometry-source")) {
-      map.addSource("geometry-source", {
-        type: "geojson",
-        data: geometry,
-      });
-    } else {
-      // Update existing source
-      const source = map.getSource("geometry-source") as maplibregl.GeoJSONSource;
-      source.setData(geometry);
-    }
-
-    // Add fill layer if it doesn't exist
-    if (!map.getLayer("geometry-fill")) {
-      map.addLayer({
-        id: "geometry-fill",
-        type: "fill",
-        source: "geometry-source",
-        paint: {
-          "fill-color": "#009de0",
-          "fill-opacity": 0.1,
-        },
-      });
-    }
-
-    // Add outline layer if it doesn't exist
-    if (!map.getLayer("geometry-outline")) {
-      map.addLayer({
-        id: "geometry-outline",
-        type: "line",
-        source: "geometry-source",
-        paint: {
-          "line-color": "#009de0",
-          "line-width": 2,
-        },
-      });
-    }
-
-    return () => {
-      // Cleanup on unmount
-      if (map.getLayer("geometry-outline")) map.removeLayer("geometry-outline");
-      if (map.getLayer("geometry-fill")) map.removeLayer("geometry-fill");
-      if (map.getSource("geometry-source")) map.removeSource("geometry-source");
-    };
-  }, [map, isLoaded, geometry]);
-
-  return null;
-}
-
-// FitBounds component that fits the map to show all data
-function FitBounds({
-  density,
-  geometry,
-}: {
-  density?: GeoJSON.FeatureCollection | null;
-  geometry?: GeoJSON.FeatureCollection | null;
-}) {
-  const { map, isLoaded } = useMap();
-
-  useEffect(() => {
-    if (!map || !isLoaded) return;
-
-    // Use geometry for bounds (the search area), fallback to density
-    const dataToFit = geometry || density;
-    if (!dataToFit || dataToFit.features.length === 0) return;
-
-    try {
-      const bbox = turf.bbox(dataToFit);
-      if (bbox[0] === Infinity) return;
-
-      // Small delay to ensure layers are rendered
-      setTimeout(() => {
-        map.fitBounds(bbox as [number, number, number, number], {
-          padding: 50,
-          duration: 1000,
-        });
-      }, 100);
-    } catch (error) {
-      console.error("Error fitting bounds:", error);
-    }
-  }, [map, isLoaded, density, geometry]);
-
-  return null;
-}
-
-// Fetch property details from the API
-async function fetchPropertyDetails(platformHash: string) {
-  const response = await fetch(`/api/metasearch-property?platform_hash=${platformHash}`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to fetch property details");
-  }
-
-  return response.json();
-}
-
 export function MyMap({ density, geometry, loading }: MyMapProps) {
   const [selectedPoint, setSelectedPoint] = useState<{
     coordinates: [number, number];
@@ -138,7 +33,6 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
   } | null>(null);
 
   // Fetch property details when a point is selected
-  // The query only runs when selectedPoint exists (enabled: !!selectedPoint)
   const {
     data: propertyDetails,
     isLoading: isLoadingDetails,
@@ -146,12 +40,13 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
   } = useQuery({
     queryKey: ["property", selectedPoint?.properties.id],
     queryFn: () => fetchPropertyDetails(selectedPoint!.properties.id),
-    enabled: !!selectedPoint?.properties.id, // Only fetch when we have a selected point
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: !!selectedPoint?.properties.id,
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
     <Card className="h-[500px] p-0 overflow-hidden relative">
+      {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/50 backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-full bg-background px-4 py-2 shadow-lg">
@@ -183,7 +78,7 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
           />
         )}
 
-        {/* Popup for selected point */}
+        {/* Property popup */}
         {selectedPoint && (
           <MapPopup
             key={`${selectedPoint.coordinates[0]}-${selectedPoint.coordinates[1]}`}
@@ -202,184 +97,20 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
           </MapPopup>
         )}
 
-        {/* FitBounds - automatically fits to show all data */}
+        {/* Auto fit bounds to data */}
         <FitBounds density={density} geometry={geometry} />
 
-        {/* Control Board - INSIDE the Map context */}
-        <ControlBoard />
+        {/* Draw control (placeholder - needs library installation) */}
+        <DrawControl
+          position="top-left"
+          onDrawCreate={(features) => console.log("Draw created:", features)}
+          onDrawDelete={(features) => console.log("Draw deleted:", features)}
+        />
 
+        {/* Navigation controls */}
+        <ControlBoard />
         <MapControls />
       </Map>
     </Card>
-  );
-}
-
-// Type for property details from the API
-interface PropertyDetails {
-  images?: string[];
-  image?: string;
-  title?: string;
-  address?: string;
-  price?: string;
-  url?: string;
-  link?: string;
-  asset_type?: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  area?: number;
-  coordinates?: [number, number];
-  latitude?: number;
-  longitude?: number;
-}
-
-// Separate component for popup content - handles loading, error, and success states
-function PropertyPopupContent({
-  isLoading,
-  error,
-  property,
-  fallbackPrice,
-}: {
-  isLoading: boolean;
-  error: Error | null;
-  property: PropertyDetails | undefined;
-  fallbackPrice: string;
-}) {
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="w-64 h-48 flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="w-64 p-4">
-        <p className="text-sm text-destructive">Failed to load property details</p>
-        <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
-      </div>
-    );
-  }
-
-  // Success state - display property details
-  const imageUrl = property?.images?.[0] || property?.image;
-  const title = property?.title || property?.address || "Property";
-  const price = property?.price || fallbackPrice;
-  const url = property?.url || property?.link;
-
-  return (
-    <div className="w-64 p-0">
-      {/* Property Image */}
-      {imageUrl && (
-        <div className="relative h-32 overflow-hidden rounded-t-md">
-          <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
-          {/* Price badge on image */}
-          {price && (
-            <div className="absolute bottom-2 left-2 bg-background/90 backdrop-blur-sm rounded-md px-2 py-1">
-              <span className="text-sm font-bold text-foreground">{price}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Property Details */}
-      <div className="space-y-2 p-3">
-        <div>
-          {property?.asset_type && (
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {property.asset_type}
-            </span>
-          )}
-          <h3 className="font-semibold text-foreground leading-tight line-clamp-2">{title}</h3>
-        </div>
-
-        {/* Property features with icons */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          {property?.bedrooms && (
-            <div className="flex items-center gap-1">
-              <Bed className="size-3.5" />
-              <span>{property.bedrooms}</span>
-            </div>
-          )}
-          {property?.bathrooms && (
-            <div className="flex items-center gap-1">
-              <Bath className="size-3.5" />
-              <span>{property.bathrooms}</span>
-            </div>
-          )}
-          {property?.area && (
-            <div className="flex items-center gap-1">
-              <Maximize className="size-3.5" />
-              <span>{property.area} m²</span>
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          {url && (
-            <Button size="sm" className="flex-1 h-8" onClick={() => window.open(url, "_blank")}>
-              <Navigation className="size-3.5 mr-1.5" />
-              View Listing
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onClick={() => {
-              const coords = property?.coordinates;
-              if (coords) {
-                window.open(
-                  `https://www.google.com/maps/dir/?api=1&destination=${coords[1]},${coords[0]}`,
-                  "_blank"
-                );
-              }
-            }}
-          >
-            <ExternalLink className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Control board component that lives inside the Map context
-function ControlBoard() {
-  const { map, isLoaded } = useMap();
-
-  const handleFlyTo = useCallback(
-    (coordinates: [number, number], zoom: number) => {
-      if (!map || !isLoaded) return;
-      map.flyTo({
-        center: coordinates,
-        zoom,
-        duration: 1500,
-      });
-    },
-    [map, isLoaded]
-  );
-
-  return (
-    <div className="absolute bottom-4 left-4 z-10 bg-background/90 backdrop-blur rounded-lg p-3 shadow-lg border">
-      <h3 className="text-xs font-medium mb-2 text-muted-foreground">Fly to</h3>
-      <div className="flex flex-wrap gap-1.5 max-w-[280px]">
-        {LOCATIONS.map((location) => (
-          <Button
-            key={location.name}
-            variant="outline"
-            size="sm"
-            className="text-xs h-7 px-2"
-            onClick={() => handleFlyTo(location.coordinates, location.zoom)}
-          >
-            {location.name}
-          </Button>
-        ))}
-      </div>
-    </div>
   );
 }
