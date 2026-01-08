@@ -13,6 +13,7 @@ import {
   fetchPropertyDetails,
   ControlBoard,
   DrawControl,
+  type DrawnFeature,
 } from "@/components/map";
 
 interface PropertyPoint {
@@ -24,9 +25,19 @@ type MyMapProps = {
   density?: GeoJSON.FeatureCollection | null;
   geometry?: GeoJSON.FeatureCollection | null;
   loading?: boolean;
+  onPolygonCreate?: (coordinates: number[][][]) => void;
+  onReset?: () => void;
+  hasCustomPolygon?: boolean;
 };
 
-export function MyMap({ density, geometry, loading }: MyMapProps) {
+export function MyMap({
+  density,
+  geometry,
+  loading,
+  onPolygonCreate,
+  onReset,
+  hasCustomPolygon,
+}: MyMapProps) {
   const [selectedPoint, setSelectedPoint] = useState<{
     coordinates: [number, number];
     properties: PropertyPoint;
@@ -43,6 +54,16 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
     enabled: !!selectedPoint?.properties.id,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Handle polygon creation from draw control
+  const handleDrawCreate = (features: DrawnFeature[]) => {
+    const geometry = features[0]?.geometry;
+    if (geometry && geometry.type === "Polygon") {
+      const coordinates = geometry.coordinates as number[][][];
+      console.log("📍 Polygon coordinates:", coordinates);
+      onPolygonCreate?.(coordinates);
+    }
+  };
 
   return (
     <Card className="h-[500px] p-0 overflow-hidden relative">
@@ -100,15 +121,12 @@ export function MyMap({ density, geometry, loading }: MyMapProps) {
         {/* Auto fit bounds to data */}
         <FitBounds density={density} geometry={geometry} />
 
-        {/* Draw control (placeholder - needs library installation) */}
-        <DrawControl
-          position="top-left"
-          onDrawCreate={(features) => console.log("Draw created:", features)}
-          onDrawDelete={(features) => console.log("Draw deleted:", features)}
-        />
+        {/* Draw control */}
+        <DrawControl position="top-left" onDrawCreate={handleDrawCreate} />
 
-        {/* Navigation controls */}
-        <ControlBoard />
+        {/* Navigation controls - simplified to just reset button */}
+        <ControlBoard onReset={onReset} hasCustomPolygon={hasCustomPolygon} />
+
         <MapControls />
       </Map>
     </Card>
