@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactStrictMode: true,
+  // Transpile maplibre-gl-draw as it uses ES modules
+  transpilePackages: ["maplibre-gl-draw"],
 };
 
 export default nextConfig;
