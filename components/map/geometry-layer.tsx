@@ -67,10 +67,14 @@ export function GeometryLayer({
     }
 
     return () => {
-      // Cleanup on unmount
-      if (map.getLayer("geometry-outline")) map.removeLayer("geometry-outline");
-      if (map.getLayer("geometry-fill")) map.removeLayer("geometry-fill");
-      if (map.getSource("geometry-source")) map.removeSource("geometry-source");
+      // Cleanup on unmount - check if map still exists
+      try {
+        if (map.getLayer("geometry-outline")) map.removeLayer("geometry-outline");
+        if (map.getLayer("geometry-fill")) map.removeLayer("geometry-fill");
+        if (map.getSource("geometry-source")) map.removeSource("geometry-source");
+      } catch {
+        // Map was already destroyed, ignore cleanup
+      }
     };
   }, [map, isLoaded, geometry, fillColor, fillOpacity, lineColor, lineWidth]);
 
